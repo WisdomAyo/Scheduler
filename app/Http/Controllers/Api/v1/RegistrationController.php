@@ -2,16 +2,13 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\RegistrationResource; // You would create this resource
+use App\Http\Resources\RegistrationResource; 
 use App\Models\Event;
 use App\Services\RegistrationService;
 use Illuminate\Support\Facades\Log;
-use App\Models\Participant;
-use App\Models\EventRegistration;
-use Illuminate\Http\Request; // Using base Request, but a FormRequest is better
+use Illuminate\Http\Request; 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB; // For transactions
-use Illuminate\Validation\ValidationException; // To throw validation errors
+use Illuminate\Validation\ValidationException; 
 use Symfony\Component\HttpFoundation\Response;
 
 class RegistrationController extends Controller
@@ -22,7 +19,7 @@ class RegistrationController extends Controller
     
     public function store(Request $request, Event $event): JsonResponse
     {
-        // Validate basic participant info (better in a FormRequest)
+       
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
@@ -36,8 +33,6 @@ class RegistrationController extends Controller
                 $validated['name'],
                 $validated['email']
             );
-
-            // Load relationships if needed by the resource
             $registration->load(['event', 'participant']);
 
             return (new RegistrationResource($registration))
@@ -45,7 +40,6 @@ class RegistrationController extends Controller
                     ->setStatusCode(Response::HTTP_CREATED);
 
         } catch (ValidationException $e) {
-             // Return validation errors (e.g., 409 Conflict or 422 Unprocessable)
              return response()->json([
                 'message' => 'Registration Failed',
                 'errors' => $e->errors()

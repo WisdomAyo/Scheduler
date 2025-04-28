@@ -17,6 +17,7 @@ return new class extends Migration
             $table->dateTime('start_datetime');
             $table->dateTime('end_datetime');
             $table->unsignedInteger('max_participants');
+            $table->string('event_image')->nullable();
             $table->timestamps(); // Adds created_at and updated_at
             $table->index(['start_datetime', 'end_datetime']);
         });

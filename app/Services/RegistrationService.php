@@ -4,9 +4,11 @@ namespace App\Services;
 use App\Models\Event;
 use App\Models\Participant;
 use App\Models\EventRegistration;
+use App\Notifications\ParticipantRegistered;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Carbon\Carbon; // Added for typing
+use Carbon\Carbon; 
 
 class RegistrationService
 {
@@ -22,15 +24,13 @@ class RegistrationService
      */
     public function registerParticipant(Event $event, string $participantName, string $participantEmail): EventRegistration
     {
-        return DB::transaction(function () use ($event, $participantName, $participantEmail) {
+        $registration = DB::transaction(function () use ($event, $participantName, $participantEmail) {
 
-            // 1. Find or Create Participant
             $participant = Participant::firstOrCreate(
                 ['email' => $participantEmail],
                 ['name' => $participantName]
             );
 
-            // 2. Check Event Capacity (Locking)
             $currentEvent = Event::lockForUpdate()->findOrFail($event->id);
             if ($currentEvent->registrations()->count() >= $currentEvent->max_participants) {
                 throw ValidationException::withMessages([
@@ -38,10 +38,8 @@ class RegistrationService
                 ]);
             }
 
-            // 3. Check for Overlapping Events
             $this->ensureNoOverlap($participant, $currentEvent);
 
-            // 4. Create Registration (Check for existing first)
             $existingRegistration = EventRegistration::where('event_id', $currentEvent->id)
                                         ->where('participant_id', $participant->id)
                                         ->first();
@@ -56,6 +54,14 @@ class RegistrationService
                 'participant_id' => $participant->id,
             ]);
         }); // End transaction
+
+        $registration->refresh();
+
+        if($registration){
+            $registration->loadMissing('participant');
+            $this->dispatchRegistrationNotification($registration->participant, $registration);
+            return $registration;
+        }
     }
 
     /**
@@ -71,7 +77,7 @@ class RegistrationService
         $newEventEnd = $newEvent->end_datetime;
 
         $hasOverlap = $participant->events()
-            ->where('events.id', '!=', $newEvent->id) // Exclude the event itself if needed
+            ->where('events.id', '!=', $newEvent->id)
             ->where(function ($query) use ($newEventStart, $newEventEnd) {
                 $query->where('start_datetime', '<', $newEventEnd)
                       ->where('end_datetime', '>', $newEventStart);
@@ -80,8 +86,38 @@ class RegistrationService
 
         if ($hasOverlap) {
              throw ValidationException::withMessages([
-                'participant_id' => ["Participant {$participant->email} is already registered for an overlapping event during this time."],
+                'participant_id' => ["Participant {$participant->email} is already registered for an overlapping event during this time. you registerd for an initail event with the same time conflict"],
             ]);
+        }
+    }
+
+    protected function dispatchRegistrationNotification(Participant $participant, EventRegistration $registration): void
+    {
+        Log::info('Dispatching registration notification for participant ID:', [$participant->id , $registration->id]);
+        try {
+            if(!$participant){
+                Log::channel('notification_logs')->warning(
+                    "Failed to queue registration notification.",
+                    [
+                        $registration->id
+                    ]);
+                return;
+            }
+            $participant->notify(new ParticipantRegistered($registration));
+            Log::info('Registration notification dispatched successfully.', [$registration->id, $participant->id]);
+        } catch (\Exception $e) {
+            // Log specifically to the 'notification_errors' channel
+            Log::channel('notification_logs')->error(
+                "Failed to queue registration notification.",
+                [
+                    'participant_id' => $participant->id,
+                    'event_id' => $registration->event_id,
+                    'registration_id' => $registration->id,
+                    'error_message' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString() // Optional: include stack trace for debugging
+                ]
+            );
+
         }
     }
 }

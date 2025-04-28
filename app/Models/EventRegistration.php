@@ -9,12 +9,10 @@ class EventRegistration extends Model
 {
     use HasFactory;
 
-    // No mass assignment protection needed if created via relationships or explicitly
-    // but can add fillable if needed for other scenarios
     protected $fillable = [
       'event_id',
       'participant_id',
-      'registered_at', // Usually set automatically
+      'registered_at', 
     ];
 
 

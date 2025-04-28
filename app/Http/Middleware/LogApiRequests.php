@@ -3,7 +3,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log; // Use the Log facade
+use Illuminate\Support\Facades\Log; 
 use Symfony\Component\HttpFoundation\Response;
 
 class LogApiRequests
@@ -15,7 +15,7 @@ class LogApiRequests
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Log basic request info before handling
+      
         Log::info('API Request:', [
             'method' => $request->method(),
             'url' => $request->fullUrl(),
